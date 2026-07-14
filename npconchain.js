@@ -6,7 +6,7 @@ const readline = require('readline');
 const CLIENT_ID   = "VC1weFM5WXJOQmxXZzI4TGZqcEs6MTpjaQ";
 const REDIRECT_URI = "https://npconchain.xyz/api/airdrop/x/callback";
 const SCOPE       = "tweet.read users.read";
-const BEARER      = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
+const BEARER      = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I7BeIJ1DEBc%3DUq7gqpkKU3zmW0c6URAdx8oYnHMgDwKDKjWnKnGkLysTwHHqVc";
 const UA          = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 const FOLLOW_TARGET = "npconchain";
 
