@@ -43,36 +43,46 @@ function xHeaders(authToken, ct0, contentType = 'application/x-www-form-urlencod
   };
 }
 
-// ─── Twitter OAuth (PKCE) ─────────────────────────────────────────────────────
-// State dibuat sendiri sebagai base64url JSON berisi code_verifier,
-// sama persis seperti yang NPC frontend lakukan di browser.
+// ─── NPC + Twitter OAuth ─────────────────────────────────────────────────────
+// Flow:
+// 1. GET /api/airdrop/x/start → NPC generate state di server, redirect ke Twitter
+// 2. Tangkap Twitter URL + session cookie NPC
+// 3. Approve OAuth di Twitter → dapat code
+// 4. GET /api/airdrop/x/callback?code=...&state=... + session cookie NPC → airdrop_session
 
-function buildState(verifier) {
-  const payload = JSON.stringify({
-    addr: 'airdrop',
-    cv: verifier,
-    ru: 'https://npconchain.xyz/airdrop',
-    exp: Date.now() + 600_000,
+async function startNpcOAuth() {
+  const r = await axios.get('https://npconchain.xyz/api/airdrop/x/start', {
+    headers: {
+      'User-Agent': UA,
+      'Referer': 'https://npconchain.xyz/airdrop',
+      'Accept': 'text/html,application/xhtml+xml,*/*',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'same-origin',
+    },
+    maxRedirects: 0,
+    validateStatus: null,
   });
-  return Buffer.from(payload).toString('base64url');
+
+  const twitterUrl = r.headers['location'] || '';
+  if (!twitterUrl.includes('x.com') && !twitterUrl.includes('twitter.com')) {
+    throw new Error(`/api/airdrop/x/start no Twitter redirect: ${r.status} ${twitterUrl.slice(0,200)}`);
+  }
+
+  // Simpan semua cookie NPC dari response ini (berisi session state)
+  const npcCookies = [].concat(r.headers['set-cookie'] || [])
+    .map(c => c.split(';')[0]).join('; ');
+
+  // Ekstrak state dari Twitter URL
+  const parsed = new URL(twitterUrl);
+  const state = parsed.searchParams.get('state') || '';
+
+  return { twitterUrl, npcCookies, state };
 }
 
-async function twitterAuth(authToken, ct0) {
-  const { verifier, challenge } = genPKCE();
-  const state = buildState(verifier);
-
-  const params = new URLSearchParams({
-    client_id: CLIENT_ID,
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
-    redirect_uri: REDIRECT_URI,
-    response_type: 'code',
-    scope: SCOPE,
-    state,
-  });
-
+async function twitterAuth(authToken, ct0, twitterUrl) {
   // Step 1: GET authorize → auth_code
-  const r1 = await axios.get(`https://x.com/i/api/2/oauth2/authorize?${params}`, {
+  const r1 = await axios.get(twitterUrl, {
     headers: xHeaders(authToken, ct0),
     validateStatus: null,
   });
@@ -81,7 +91,7 @@ async function twitterAuth(authToken, ct0) {
   const authCode = r1.data?.auth_code;
   if (!authCode) throw new Error(`No auth_code: ${JSON.stringify(r1.data).slice(0,200)}`);
 
-  // Step 2: POST approve → dapat redirect_uri dengan code
+  // Step 2: POST approve → redirect_uri dengan code
   const r2 = await axios.post(
     'https://x.com/i/api/2/oauth2/authorize',
     `approval=true&code=${authCode}`,
@@ -94,14 +104,18 @@ async function twitterAuth(authToken, ct0) {
   const code = url.searchParams.get('code');
   if (!code) throw new Error(`No code in redirect: ${JSON.stringify(r2.data).slice(0,200)}`);
 
-  return { code, state };
+  return code;
 }
 
 // ─── NPC Session ──────────────────────────────────────────────────────────────
 
-async function getAirdropSession(code, state) {
+async function getAirdropSession(code, state, npcCookies) {
   const r = await axios.get(`${REDIRECT_URI}?code=${code}&state=${state}`, {
-    headers: { 'User-Agent': UA, 'Referer': 'https://npconchain.xyz/airdrop' },
+    headers: {
+      'User-Agent': UA,
+      'Referer': 'https://npconchain.xyz/airdrop',
+      'Cookie': npcCookies,
+    },
     maxRedirects: 0,
     validateStatus: null,
   });
@@ -114,7 +128,7 @@ async function getAirdropSession(code, state) {
   const location = r.headers['location'];
   if (location) {
     const r2 = await axios.get(location.startsWith('http') ? location : `https://npconchain.xyz${location}`, {
-      headers: { 'User-Agent': UA },
+      headers: { 'User-Agent': UA, 'Cookie': npcCookies },
       maxRedirects: 0,
       validateStatus: null,
     });
@@ -240,20 +254,31 @@ async function runAccount(authToken, ct0, wallet, refCode, mode = 'all') {
   console.log(`\n${'='.repeat(40)}`);
   console.log(`[*] ${tag}`);
 
-  // Twitter OAuth + NPC session
-  console.log('[*] Twitter OAuth...');
-  let code, state;
+  // Step 1: NPC generate state, redirect ke Twitter
+  console.log('[*] NPC OAuth start...');
+  let twitterUrl, npcCookies, state;
   try {
-    ({ code, state } = await twitterAuth(authToken, ct0));
+    ({ twitterUrl, npcCookies, state } = await startNpcOAuth());
   } catch (e) {
     console.log(`[!] ${e.message}`);
     return;
   }
 
+  // Step 2: Approve di Twitter
+  console.log('[*] Twitter OAuth...');
+  let code;
+  try {
+    code = await twitterAuth(authToken, ct0, twitterUrl);
+  } catch (e) {
+    console.log(`[!] ${e.message}`);
+    return;
+  }
+
+  // Step 3: Callback ke NPC → dapat airdrop_session
   console.log('[*] Getting airdrop_session...');
   let session;
   try {
-    session = await getAirdropSession(code, state);
+    session = await getAirdropSession(code, state, npcCookies);
   } catch (e) {
     console.log(`[!] ${e.message}`);
     return;
