@@ -83,7 +83,10 @@ async function startNpcOAuth() {
 async function twitterAuth(authToken, ct0, twitterUrl) {
   // Step 1: GET authorize → auth_code
   const r1 = await axios.get(twitterUrl, {
-    headers: xHeaders(authToken, ct0),
+    headers: {
+      ...xHeaders(authToken, ct0),
+      'Accept': 'application/json',
+    },
     validateStatus: null,
   });
   if (r1.status !== 200) throw new Error(`GET authorize: ${r1.status} ${JSON.stringify(r1.data).slice(0,200)}`);
