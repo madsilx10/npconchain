@@ -88,10 +88,11 @@ async function twitterAuth(authToken, ct0) {
 // ─── NPC Session ──────────────────────────────────────────────────────────────
 
 async function getAirdropSession(code, state) {
+  // maxRedirects: 0 supaya bisa tangkap cookie di response 302
   const r = await axios.get(`${REDIRECT_URI}?code=${code}&state=${state}`, {
     headers: { 'User-Agent': UA, 'Referer': 'https://npconchain.xyz/airdrop' },
-    maxRedirects: 10,
-    validateStatus: null,
+    maxRedirects: 0,
+    validateStatus: s => s < 400 || s === 302,
   });
 
   const cookies = [].concat(r.headers['set-cookie'] || []);
@@ -99,6 +100,22 @@ async function getAirdropSession(code, state) {
     const m = c.match(/airdrop_session=([^;]+)/);
     if (m) return m[1];
   }
+
+  // Kalau cookie ada di Location redirect, coba follow manual
+  const location = r.headers['location'];
+  if (location) {
+    const r2 = await axios.get(location, {
+      headers: { 'User-Agent': UA, 'Referer': 'https://npconchain.xyz/airdrop' },
+      maxRedirects: 0,
+      validateStatus: null,
+    });
+    const cookies2 = [].concat(r2.headers['set-cookie'] || []);
+    for (const c of cookies2) {
+      const m = c.match(/airdrop_session=([^;]+)/);
+      if (m) return m[1];
+    }
+  }
+
   throw new Error(`No airdrop_session. Status: ${r.status}`);
 }
 
