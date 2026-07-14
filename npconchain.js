@@ -116,6 +116,11 @@ async function getAirdropSession(code, state) {
     }
   }
 
+  // Debug: print semua headers biar tau cookie apa yang dikasih
+  console.log('[DEBUG] Status:', r.status);
+  console.log('[DEBUG] set-cookie:', JSON.stringify(r.headers['set-cookie']));
+  console.log('[DEBUG] location:', r.headers['location']);
+
   throw new Error(`No airdrop_session. Status: ${r.status}`);
 }
 
