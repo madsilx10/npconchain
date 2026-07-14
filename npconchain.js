@@ -342,24 +342,56 @@ function ask(rl, q) {
 }
 
 async function main() {
-  let lines;
+  // Load akun.txt: auth_token, ct0, blank (per akun)
+  let akunLines;
   try {
-    lines = fs.readFileSync('accounts.txt', 'utf8')
-      .split('\n')
-      .map(l => l.trim())
-      .filter(l => l && !l.startsWith('#'));
+    akunLines = fs.readFileSync('akun.txt', 'utf8').split('\n').map(l => l.trim());
   } catch {
-    console.log('[!] accounts.txt not found');
-    console.log('Format: auth_token,ct0,evm_wallet,ref_code');
+    console.log('[!] akun.txt not found');
     return;
   }
 
-  const accounts = lines.map(l => {
-    const [auth_token, ct0, wallet, ref_code] = l.split(',').map(s => s.trim());
-    return { auth_token, ct0, wallet, ref_code };
-  }).filter(a => a.auth_token && a.ct0);
+  // Load wallet.txt: satu address per baris
+  let wallets;
+  try {
+    wallets = fs.readFileSync('wallet.txt', 'utf8')
+      .split('\n').map(l => l.trim()).filter(Boolean);
+  } catch {
+    console.log('[!] wallet.txt not found');
+    return;
+  }
 
-  console.log(`\n[*] ${accounts.length} accounts loaded`);
+  // Load reff.txt: satu ref code per baris, paired by index (1 reff sekali pake)
+  let reffs;
+  try {
+    reffs = fs.readFileSync('reff.txt', 'utf8')
+      .split('\n').map(l => l.trim()).filter(Boolean);
+  } catch {
+    console.log('[!] reff.txt not found');
+    return;
+  }
+
+  // Parse akun.txt: tiap akun = auth_token, ct0, lalu blank
+  const accounts = [];
+  let i = 0;
+  while (i < akunLines.length) {
+    while (i < akunLines.length && !akunLines[i]) i++;
+    if (i >= akunLines.length) break;
+    const auth_token = akunLines[i++];
+    const ct0        = akunLines[i++] || '';
+    accounts.push({ auth_token, ct0 });
+    while (i < akunLines.length && !akunLines[i]) i++;
+  }
+
+  // Pair akun + wallet + reff by index
+  accounts.forEach((a, idx) => {
+    a.wallet = wallets[idx] || '';
+    a.reff   = reffs[idx]   || '';
+  });
+  const validAccounts = accounts.filter(a => a.auth_token && a.ct0 && a.wallet);
+
+  console.log(`\n[*] ${validAccounts.length} accounts loaded`);
+  if (!validAccounts.length) { console.log('[!] No valid accounts'); return; }
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
@@ -367,18 +399,19 @@ async function main() {
   console.log('\nPilih akun:');
   console.log('1. 1 akun');
   console.log('2. Semua');
-  console.log('3. From x to end');
+  console.log('3. Range');
   const pil = (await ask(rl, 'Pilih: ')).trim();
 
   let selected;
   if (pil === '1') {
-    const idx = parseInt(await ask(rl, `Nomor akun (1-${accounts.length}): `)) - 1;
-    selected = accounts.slice(idx, idx + 1);
+    const idx = parseInt(await ask(rl, `Nomor akun (1-${validAccounts.length}): `)) - 1;
+    selected = validAccounts.slice(idx, idx + 1);
   } else if (pil === '3') {
     const from = parseInt(await ask(rl, 'From (1-based): ')) - 1;
-    selected = accounts.slice(from);
+    const to   = parseInt(await ask(rl, 'To (1-based, inclusive): '));
+    selected = validAccounts.slice(from, to);
   } else {
-    selected = accounts; // default: semua
+    selected = validAccounts;
   }
 
   // Pilih mode
@@ -392,12 +425,12 @@ async function main() {
 
   console.log(`\n[*] Running ${selected.length} account(s) | Mode: ${mode}`);
 
-  for (let i = 0; i < selected.length; i++) {
-    const { auth_token, ct0, wallet, ref_code } = selected[i];
-    console.log(`\n[${i + 1}/${selected.length}]`);
-    await process(auth_token, ct0, wallet, ref_code, mode);
+  for (let j = 0; j < selected.length; j++) {
+    const { auth_token, ct0, wallet, reff } = selected[j];
+    console.log(`\n[${j + 1}/${selected.length}]`);
+    await process(auth_token, ct0, wallet, reff, mode);
 
-    if (i < selected.length - 1) {
+    if (j < selected.length - 1) {
       const s = (Math.random() * 5 + 5).toFixed(1);
       console.log(`\n[*] Cooldown ${s}s...`);
       await new Promise(r => setTimeout(r, parseFloat(s) * 1000));
