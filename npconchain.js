@@ -207,7 +207,7 @@ const FOLLOWED_FILE = 'followed.json';  // auth_token -> true
 
 // ─── Main Process ─────────────────────────────────────────────────────────────
 
-async function process(authToken, ct0, wallet, refCode, mode = 'all') {
+async function runAccount(authToken, ct0, wallet, refCode, mode = 'all') {
   const tag = wallet.slice(0, 10) + '...';
   console.log(`\n${'='.repeat(40)}`);
   console.log(`[*] ${tag}`);
@@ -428,7 +428,7 @@ async function main() {
   for (let j = 0; j < selected.length; j++) {
     const { auth_token, ct0, wallet, reff } = selected[j];
     console.log(`\n[${j + 1}/${selected.length}]`);
-    await process(auth_token, ct0, wallet, reff, mode);
+    await runAccount(auth_token, ct0, wallet, reff, mode);
 
     if (j < selected.length - 1) {
       const s = (Math.random() * 5 + 5).toFixed(1);
