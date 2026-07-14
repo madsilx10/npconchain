@@ -44,6 +44,15 @@ function xHeaders(authToken, ct0, contentType = 'application/x-www-form-urlencod
 }
 
 // ─── NPC + Twitter OAuth ─────────────────────────────────────────────────────
+
+async function getGuestToken() {
+  const r = await axios.post('https://api.twitter.com/1.1/guest/activate.json', null, {
+    headers: { 'Authorization': `Bearer ${BEARER}`, 'User-Agent': UA },
+    validateStatus: null,
+  });
+  if (r.status !== 200) throw new Error(`guest token: ${r.status}`);
+  return r.data.guest_token;
+}
 // Flow:
 // 1. GET /api/airdrop/x/start → NPC generate state di server, redirect ke Twitter
 // 2. Tangkap Twitter URL + session cookie NPC
@@ -81,11 +90,15 @@ async function startNpcOAuth() {
 }
 
 async function twitterAuth(authToken, ct0, twitterUrl) {
+  const guestToken = await getGuestToken();
+
   // Step 1: GET authorize → auth_code
   const r1 = await axios.get(twitterUrl, {
     headers: {
       ...xHeaders(authToken, ct0),
       'Accept': 'application/json',
+      'Cookie': `guest_id=v1%3A${guestToken}; auth_token=${authToken}; ct0=${ct0}`,
+      'X-Guest-Token': guestToken,
     },
     validateStatus: null,
   });
