@@ -592,6 +592,43 @@ function ask(rl, q) {
   return new Promise(res => rl.question(q, res));
 }
 
+// ─── Mode: Check Status ──────────────────────────────────────────────────────
+async function checkStatus(authToken, label) {
+  const postedMap  = loadJson(POSTED_FILE);
+  const sessionMap = loadJson(SESSION_FILE);
+
+  const tweetUrl  = postedMap[authToken] || null;
+  const session   = sessionMap[authToken] || null;
+
+  let npcStatus = null;
+  if (session) {
+    try {
+      const me = await npc('GET', '/api/airdrop/me', session);
+      if (me?.user) {
+        const tasksResp = await npc('GET', '/api/airdrop/tasks', session);
+        const tasks = tasksResp?.tasks || [];
+        const postTask = tasks.find(t => t.key === 'genesis_post_link');
+        npcStatus = postTask?.claimed ? 'claimed' : 'not claimed';
+      } else {
+        npcStatus = 'session expired';
+      }
+    } catch {
+      npcStatus = 'session expired';
+    }
+  } else {
+    npcStatus = 'no session';
+  }
+
+  const tweetIcon = tweetUrl  ? '✅' : '❌';
+  const npcIcon   = npcStatus === 'claimed' ? '✅'
+                  : npcStatus === 'not claimed' ? '❌'
+                  : '⚠️';
+
+  console.log(`  Tweet  : ${tweetIcon} ${tweetUrl || 'belum'}`);
+  console.log(`  NPC    : ${npcIcon} ${npcStatus}`);
+}
+
+
 async function main() {
   // Load akun.txt: auth_token, ct0, blank (per akun)
   let akunLines;
@@ -672,11 +709,13 @@ async function main() {
   console.log('3. Post');
   console.log('4. Daily + Task (skip post)');
   console.log('5. Connect X (save session only)');
+  console.log('6. Check Status');
   const modePil = (await ask(rl, 'Pilih: ')).trim();
   const mode = modePil === '2' ? 'daily'
              : modePil === '3' ? 'post'
              : modePil === '4' ? 'daily+task'
              : modePil === '5' ? 'connect'
+             : modePil === '6' ? 'check'
              : 'all';
 
   rl.close();
@@ -686,13 +725,11 @@ async function main() {
   for (let j = 0; j < selected.length; j++) {
     const { auth_token, ct0, wallet, reff } = selected[j];
     console.log(`\n[${j + 1}/${selected.length}]`);
-    try {
-      await fetchBearer();
-    } catch (e) {
-      console.log('[!] fetchBearer failed:', e.message);
-      continue;
+    if (mode === 'check') {
+      await checkStatus(auth_token, `[${j + 1}/${selected.length}]`);
+    } else {
+      await runAccount(auth_token, ct0, wallet, reff, mode);
     }
-    await runAccount(auth_token, ct0, wallet, reff, mode);
 
     if (j < selected.length - 1) {
       const s = (Math.random() * 5 + 5).toFixed(1);
