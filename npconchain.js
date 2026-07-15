@@ -46,18 +46,30 @@ function xHeaders(authToken, ct0, contentType = 'application/x-www-form-urlencod
 // ─── NPC + Twitter OAuth ─────────────────────────────────────────────────────
 
 async function getGuestToken() {
-  const r = await axios.post('https://api.x.com/1.1/guest/activate.json', null, {
-    headers: {
-      'Authorization': `Bearer ${BEARER}`,
-      'User-Agent': UA,
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Origin': 'https://x.com',
-      'Referer': 'https://x.com/',
-    },
+  const r = await axios.get('https://x.com', {
+    headers: { 'User-Agent': UA },
     validateStatus: null,
   });
-  if (!r.data?.guest_token) throw new Error(`guest/activate: ${r.status} ${JSON.stringify(r.data)}`);
-  return r.data.guest_token;
+  const html = typeof r.data === 'string' ? r.data : '';
+
+  // Coba dari cookie set-cookie
+  for (const c of [].concat(r.headers['set-cookie'] || [])) {
+    const m = c.match(/gt=(\d+)/);
+    if (m) return m[1];
+  }
+
+  // Coba dari __NEXT_DATA__ atau embedded JSON
+  const patterns = [
+    /"gt"\s*:\s*"?(\d+)"?/,
+    /"guestToken"\s*:\s*"?(\d+)"?/,
+    /gt=(\d+)/,
+  ];
+  for (const p of patterns) {
+    const m = html.match(p);
+    if (m) return m[1];
+  }
+
+  throw new Error('guest token not found in x.com');
 }
 // 1. GET /api/airdrop/x/start → NPC generate state di server, redirect ke Twitter
 // 2. Tangkap Twitter URL + session cookie NPC
