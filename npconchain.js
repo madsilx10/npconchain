@@ -117,7 +117,6 @@ async function twitterAuth(authToken, ct0, twitterUrl) {
 
   const r1 = await axios.get(apiUrl, {
     headers: {
-      'Authorization': `Bearer ${BEARER}`,
       'Cookie': `auth_token=${authToken}; ct0=${ct0}`,
       'X-Csrf-Token': ct0,
       'User-Agent': UA,
