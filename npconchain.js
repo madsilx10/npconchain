@@ -320,7 +320,8 @@ async function postTweet(authToken, ct0, text) {
 
 function buildTweetText(referralCodes) {
   const codes = referralCodes.map(c => c.code).join('\n');
-  return `join me on NPC · Playable Characters\ngrab an invite code (one-time use):\n\n${codes}\n\nhttps://npconchain.xyz/airdrop`;
+  const uid = crypto.randomBytes(4).toString('hex');
+  return `join me on NPC · Playable Characters\ngrab an invite code (one-time use):\n\n${codes}\n\nhttps://npconchain.xyz/airdrop?ref=${uid}`;
 }
 
 // ─── Posted URL Cache (posted.json) ──────────────────────────────────────────
@@ -402,8 +403,9 @@ async function runAccount(authToken, ct0, wallet, refCode, mode = 'all') {
   console.log(`[*] ${tasks.length} tasks found`);
 
   // ── Follow ──
-  // Cek followed.json — kalau sudah, skip total, zero API call ke Twitter
-  if (loadJson(FOLLOWED_FILE)[authToken]) {
+  if (mode === 'post') {
+    console.log(`    [SKIP] follow (mode: post)`);
+  } else if (loadJson(FOLLOWED_FILE)[authToken]) {
     console.log(`    [SKIP] follow (already followed)`);
   } else {
     console.log(`[*] Follow @${FOLLOW_TARGET}...`);
@@ -418,14 +420,13 @@ async function runAccount(authToken, ct0, wallet, refCode, mode = 'all') {
   }
 
   // ── Post tweet ──
-  // Cek posted.json dulu — kalau ada, pakai URL lama, zero API call ke Twitter
   let tweetUrl = loadJson(POSTED_FILE)[authToken] || null;
 
   const postTask = tasks.find(t => t.key === 'genesis_post_link');
   if (postTask?.claimed) {
     console.log(`    [SKIP] genesis_post_link (already claimed)`);
-  } else if (mode === 'daily') {
-    console.log(`    [SKIP] genesis_post_link (not daily)`);
+  } else if (mode === 'daily' || mode === 'daily+task') {
+    console.log(`    [SKIP] genesis_post_link (mode: ${mode})`);
   } else if (tweetUrl) {
     console.log(`[+] Tweet (from cache): ${tweetUrl}`);
   } else if (referralCodes.length === 0) {
@@ -454,11 +455,26 @@ async function runAccount(authToken, ct0, wallet, refCode, mode = 'all') {
       continue;
     }
 
-    // Daily mode: skip task yg bukan daily
-    if (mode === 'daily' && !DAILY_TASK_KEYS.has(key)) {
-      console.log(`    [SKIP] ${key} (not daily)`);
-      continue;
+    // Skip berdasarkan mode
+    if (mode === 'post') {
+      // post mode: skip semua task kecuali genesis_post_link
+      if (key !== 'genesis_post_link') {
+        console.log(`    [SKIP] ${key} (mode: post)`);
+        continue;
+      }
+    } else if (mode === 'daily') {
+      if (!DAILY_TASK_KEYS.has(key)) {
+        console.log(`    [SKIP] ${key} (mode: daily)`);
+        continue;
+      }
+    } else if (mode === 'daily+task') {
+      // skip genesis_post_link aja
+      if (key === 'genesis_post_link') {
+        console.log(`    [SKIP] ${key} (mode: daily+task)`);
+        continue;
+      }
     }
+    // mode 'all': jalanin semua
 
     if (key === 'genesis_post_link') {
       if (!tweetUrl) {
@@ -570,8 +586,13 @@ async function main() {
   console.log('\nMode:');
   console.log('1. All');
   console.log('2. Daily');
+  console.log('3. Post');
+  console.log('4. Daily + Task (skip post)');
   const modePil = (await ask(rl, 'Pilih: ')).trim();
-  const mode = modePil === '2' ? 'daily' : 'all';
+  const mode = modePil === '2' ? 'daily'
+             : modePil === '3' ? 'post'
+             : modePil === '4' ? 'daily+task'
+             : 'all';
 
   rl.close();
 
