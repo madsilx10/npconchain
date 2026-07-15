@@ -55,6 +55,8 @@ async function getGuestToken() {
     const m = c.match(/gt=(\d+)/);
     if (m) return m[1];
   }
+  // Debug
+  console.log('[DEBUG] gt cookies:', cookies.map(c => c.split(';')[0]));
   throw new Error('guest token not found');
 }
 // Flow:
