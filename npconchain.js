@@ -45,17 +45,17 @@ function xHeaders(authToken, ct0, contentType = 'application/x-www-form-urlencod
 
 // ─── NPC + Twitter OAuth ─────────────────────────────────────────────────────
 
-async function getGuestId() {
-  const r = await axios.get('https://x.com', {
-    headers: { 'User-Agent': UA },
+async function getGuestToken() {
+  const r = await axios.post('https://api.twitter.com/1.1/guest/activate.json', null, {
+    headers: {
+      'Authorization': `Bearer ${BEARER}`,
+      'User-Agent': UA,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
     validateStatus: null,
   });
-  const cookies = [].concat(r.headers['set-cookie'] || []);
-  for (const c of cookies) {
-    const m = c.match(/guest_id=([^;]+)/);
-    if (m) return m[1];
-  }
-  throw new Error('guest_id not found');
+  if (!r.data?.guest_token) throw new Error(`guest/activate: ${r.status} ${JSON.stringify(r.data)}`);
+  return r.data.guest_token;
 }
 // 1. GET /api/airdrop/x/start → NPC generate state di server, redirect ke Twitter
 // 2. Tangkap Twitter URL + session cookie NPC
@@ -93,14 +93,14 @@ async function startNpcOAuth() {
 }
 
 async function twitterAuth(authToken, ct0, twitterUrl) {
-  const guestId = await getGuestId();
+  const guestToken = await getGuestToken();
 
-  // Step 1: GET authorize → auth_code
+  // Step 1: GET authorize → auth_code (butuh gt cookie supaya balik JSON)
   const r1 = await axios.get(twitterUrl, {
     headers: {
       ...xHeaders(authToken, ct0),
-      'Accept': 'application/json',
-      'Cookie': `guest_id=${guestId}; auth_token=${authToken}; ct0=${ct0}`,
+      'Cookie': `gt=${guestToken}; auth_token=${authToken}; ct0=${ct0}`,
+      'X-Guest-Token': guestToken,
     },
     validateStatus: null,
   });
