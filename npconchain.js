@@ -44,10 +44,16 @@ async function fetchBearer() {
     validateStatus: null,
   });
   const src = typeof js.data === 'string' ? js.data : '';
-  const m = src.match(/AAAAAAAAAAAAAAAAAAAAAA[A-Za-z0-9%+=\/]{20,}/);
+  const patterns = [
+    /AAAA+[A-Za-z0-9%+=\/-]*NRILg[A-Za-z0-9%+=\/-]+/,
+    /Bearer['" ]+([A-Za-z0-9%+=\/-]{80,})/,
+    /AAAA[A-Za-z0-9%+=\/-]{50,}/,
+  ];
+  let m = null;
+  for (const p of patterns) { m = src.match(p); if (m) break; }
   if (!m) throw new Error('Bearer not found in main.js');
 
-  BEARER = m[0];
+  BEARER = m[1] || m[0];
   console.log('[*] Bearer fetched OK');
 }
 
