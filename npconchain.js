@@ -108,20 +108,24 @@ async function startNpcOAuth() {
 
 async function twitterAuth(authToken, ct0, twitterUrl) {
   // Step 1: GET authorize → auth_code
-  // NOTE: jangan campur gt (guest token) dengan auth_token di sini.
-  // Endpoint OAuth authorize ini pakai session login (auth_token+ct0),
-  // bukan guest session. Kalau gt ikut dikirim, X kadang balikin
-  // HTML login page, bukan JSON auth_code.
+  // PENTING: endpoint oauth2/authorize pakai USER session auth (cookie),
+  // jangan campur dengan APP Bearer token — dua metode auth berbeda,
+  // kalau digabung X sering balikin 401 walau cookie-nya sendiri valid.
   const r1 = await axios.get(twitterUrl, {
     headers: {
-      ...xHeaders(authToken, ct0),
+      'Cookie': `auth_token=${authToken}; ct0=${ct0}`,
+      'X-Csrf-Token': ct0,
+      'User-Agent': UA,
+      'X-Twitter-Active-User': 'yes',
+      'X-Twitter-Auth-Type': 'OAuth2Session',
+      'X-Twitter-Client-Language': 'en',
     },
     validateStatus: null,
   });
   if (r1.status !== 200) throw new Error(`GET authorize: ${r1.status} ${JSON.stringify(r1.data).slice(0,200)}`);
   const isHtml = typeof r1.data === 'string' && r1.data.trim().startsWith('<!DOCTYPE');
   if (isHtml) {
-    throw new Error(`Got HTML login page instead of JSON — auth_token/ct0 kemungkinan invalid/expired atau tidak matching. Status: ${r1.status}`);
+    throw new Error(`Got HTML login page instead of JSON. Status: ${r1.status}`);
   }
 
   let authCode = r1.data?.auth_code;
