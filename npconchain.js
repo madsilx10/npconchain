@@ -612,7 +612,7 @@ async function checkStatus(authToken) {
     }
 
     const tasksResp = await npc('GET', '/api/airdrop/tasks', session);
-    console.log('  [DEBUG] raw tasks response:', JSON.stringify(tasksResp).slice(0, 1000));
+    console.log('  [DEBUG] raw tasks response:', JSON.stringify(tasksResp).slice(0, 3000));
     const tasks     = tasksResp?.tasks || [];
     const postTask  = tasks.find(t => t.key === 'daily_spread_word_v2');
 
