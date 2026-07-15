@@ -46,12 +46,16 @@ function xHeaders(authToken, ct0, contentType = 'application/x-www-form-urlencod
 // ─── NPC + Twitter OAuth ─────────────────────────────────────────────────────
 
 async function getGuestToken() {
-  const r = await axios.post('https://api.twitter.com/1.1/guest/activate.json', null, {
-    headers: { 'Authorization': `Bearer ${BEARER}`, 'User-Agent': UA },
+  const r = await axios.get('https://x.com', {
+    headers: { 'User-Agent': UA },
     validateStatus: null,
   });
-  if (r.status !== 200) throw new Error(`guest token: ${r.status}`);
-  return r.data.guest_token;
+  const cookies = [].concat(r.headers['set-cookie'] || []);
+  for (const c of cookies) {
+    const m = c.match(/gt=(\d+)/);
+    if (m) return m[1];
+  }
+  throw new Error('guest token not found');
 }
 // Flow:
 // 1. GET /api/airdrop/x/start → NPC generate state di server, redirect ke Twitter
