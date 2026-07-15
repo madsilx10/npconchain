@@ -343,9 +343,9 @@ async function postTweet(authToken, ct0, text, attempt = 0) {
 
       const tweetResults = r.data?.data?.create_tweet?.tweet_results;
       if (!tweetResults || Object.keys(tweetResults).length === 0) {
-        if (attempt < 2) {
-          console.log(`    [RETRY] tweet_results empty, attempt ${attempt + 1}, ganti teks...`);
-          await delay(3000, 6000);
+        if (attempt < 1) {
+          console.log(`    [RETRY] tweet_results empty, waiting 60s...`);
+          await new Promise(r => setTimeout(r, 60000));
           const padded = text + '\u200b'.repeat(attempt + 2);
           return postTweet(authToken, ct0, padded, attempt + 1);
         }
