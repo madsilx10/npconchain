@@ -312,17 +312,11 @@ async function postTweet(authToken, ct0, text, attempt = 0) {
     queryId: qid,
   };
 
-  const TWEET_ENDPOINTS = [
+  const r = await axios.post(
     `https://x.com/i/api/graphql/${qid}/CreateTweet`,
-    `https://twitter.com/i/api/graphql/${qid}/CreateTweet`,
-  ];
-
-  let r;
-  for (const url of TWEET_ENDPOINTS) {
-    r = await axios.post(url, payload, { headers: xHeaders(authToken, ct0, 'application/json'), validateStatus: null });
-    if (r.status !== 403) break;
-    console.log(`    [RETRY] ${url} -> 403, coba endpoint lain...`);
-  }
+    payload,
+    { headers: xHeaders(authToken, ct0, 'application/json'), validateStatus: null }
+  );
 
   if (r.status === 200) {
     try {
@@ -519,15 +513,15 @@ async function runAccount(authToken, ct0, wallet, refCode, mode = 'all') {
   // ── Post tweet ──
   let tweetUrl = loadJson(POSTED_FILE)[authToken] || null;
 
-  const postTask = tasks.find(t => t.key === 'genesis_post_link');
+  const postTask = tasks.find(t => t.key === 'daily_spread_word_v2');
   if (postTask?.claimed) {
-    console.log(`    [SKIP] genesis_post_link (already claimed)`);
+    console.log(`    [SKIP] daily_spread_word_v2 (already claimed)`);
   } else if (mode === 'daily' || mode === 'daily+task') {
-    console.log(`    [SKIP] genesis_post_link (mode: ${mode})`);
+    console.log(`    [SKIP] daily_spread_word_v2 (mode: ${mode})`);
   } else if (tweetUrl) {
     console.log(`[+] Tweet (from cache): ${tweetUrl}`);
   } else if (referralCodes.length === 0) {
-    console.log(`    [SKIP] genesis_post_link (no referral codes)`);
+    console.log(`    [SKIP] daily_spread_word_v2 (no referral codes)`);
   } else {
     console.log('[*] Posting tweet...');
     const tw = await postTweet(authToken, ct0, buildTweetText(referralCodes, 0));
@@ -554,8 +548,8 @@ async function runAccount(authToken, ct0, wallet, refCode, mode = 'all') {
 
     // Skip berdasarkan mode
     if (mode === 'post') {
-      // post mode: skip semua task kecuali genesis_post_link
-      if (key !== 'genesis_post_link') {
+      // post mode: skip semua task kecuali daily_spread_word_v2
+      if (key !== 'daily_spread_word_v2') {
         console.log(`    [SKIP] ${key} (mode: post)`);
         continue;
       }
@@ -565,15 +559,15 @@ async function runAccount(authToken, ct0, wallet, refCode, mode = 'all') {
         continue;
       }
     } else if (mode === 'daily+task') {
-      // skip genesis_post_link aja
-      if (key === 'genesis_post_link') {
+      // skip daily_spread_word_v2 aja
+      if (key === 'daily_spread_word_v2') {
         console.log(`    [SKIP] ${key} (mode: daily+task)`);
         continue;
       }
     }
     // mode 'all': jalanin semua
 
-    if (key === 'genesis_post_link') {
+    if (key === 'daily_spread_word_v2') {
       if (!tweetUrl) {
         console.log(`    [SKIP] ${key} (no tweet url)`);
         continue;
@@ -618,8 +612,9 @@ async function checkStatus(authToken) {
     }
 
     const tasksResp = await npc('GET', '/api/airdrop/tasks', session);
+    console.log('  [DEBUG] raw tasks response:', JSON.stringify(tasksResp).slice(0, 3000));
     const tasks     = tasksResp?.tasks || [];
-    const postTask  = tasks.find(t => t.key === 'genesis_post_link');
+    const postTask  = tasks.find(t => t.key === 'daily_spread_word_v2');
 
     const taskClaimed = postTask?.claimed ?? null;
     const tweetUrl    = postTask?.metadata?.url || postTask?.data?.url || null;
