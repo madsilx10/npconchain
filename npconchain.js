@@ -320,18 +320,36 @@ async function postTweet(authToken, ct0, text, attempt = 0) {
 
   if (r.status === 200) {
     try {
+      // Cek errors array dulu sebelum tweet_results
+      const errors = r.data?.errors;
+      if (errors?.length) {
+        const e0 = errors[0];
+        const code = e0?.code || e0?.extensions?.code;
+        const msg  = e0?.message || JSON.stringify(e0);
+        // 226 = AuthorizationError (akun locked/restricted/read-only) — jangan retry
+        if (code === 226 || e0?.extensions?.name === 'AuthorizationError') {
+          return { ok: false, err: `Akun restricted/locked (code 226): ${msg}` };
+        }
+        // 32 = bad auth token
+        if (code === 32 || e0?.extensions?.name === 'Unauthorized') {
+          return { ok: false, err: `Auth token invalid (code 32): ${msg}` };
+        }
+        // 187 = duplicate tweet
+        if (code === 187) {
+          return { ok: false, err: `Duplicate tweet (code 187) — tweet sebelumnya identik` };
+        }
+        return { ok: false, err: `Twitter error code ${code}: ${msg}` };
+      }
+
       const tweetResults = r.data?.data?.create_tweet?.tweet_results;
       if (!tweetResults || Object.keys(tweetResults).length === 0) {
-        // Kemungkinan spam detection — coba sekali lagi dengan teks berbeda
         if (attempt < 2) {
           console.log(`    [RETRY] tweet_results empty, attempt ${attempt + 1}, ganti teks...`);
           await delay(3000, 6000);
-          // caller harus provide referralCodes, tapi karena text sudah dibangun,
-          // kita encode attempt ke dalam zero-width space
           const padded = text + '\u200b'.repeat(attempt + 2);
           return postTweet(authToken, ct0, padded, attempt + 1);
         }
-        return { ok: false, err: `tweet_results empty (spam/restricted?) after ${attempt + 1} tries: ${JSON.stringify(r.data).slice(0, 200)}` };
+        return { ok: false, err: `tweet_results empty after ${attempt + 1} tries: ${JSON.stringify(r.data).slice(0, 200)}` };
       }
       // Handle berbagai kemungkinan struktur response
       const res      = tweetResults.result || tweetResults;
@@ -393,6 +411,31 @@ function saveJson(file, authToken, value) {
 
 const POSTED_FILE   = 'posted.json';    // auth_token -> tweet url
 const FOLLOWED_FILE = 'followed.json';  // auth_token -> true
+const SESSION_FILE  = 'sessions.json';  // auth_token -> airdrop_session
+
+async function getOrCreateSession(authToken, ct0) {
+  const cached = loadJson(SESSION_FILE)[authToken];
+  if (cached) {
+    try {
+      const me = await npc('GET', '/api/airdrop/me', cached);
+      if (me?.user) {
+        console.log('[+] Session dari cache OK');
+        return cached;
+      }
+    } catch {}
+    console.log('[!] Session cache expired, OAuth ulang...');
+  }
+
+  console.log('[*] NPC OAuth start...');
+  const { twitterUrl, npcCookies, state } = await startNpcOAuth();
+  console.log('[*] Twitter OAuth...');
+  const code = await twitterAuth(authToken, ct0, twitterUrl);
+  console.log('[*] Getting airdrop_session...');
+  const session = await getAirdropSession(code, state, npcCookies);
+  saveJson(SESSION_FILE, authToken, session);
+  console.log('[+] Session OK (disimpan)');
+  return session;
+}
 
 // ─── Main Process ─────────────────────────────────────────────────────────────
 
@@ -401,36 +444,26 @@ async function runAccount(authToken, ct0, wallet, refCode, mode = 'all') {
   console.log(`\n${'='.repeat(40)}`);
   console.log(`[*] ${tag}`);
 
-  // Step 1: NPC generate state, redirect ke Twitter
-  console.log('[*] NPC OAuth start...');
-  let twitterUrl, npcCookies, state;
-  try {
-    ({ twitterUrl, npcCookies, state } = await startNpcOAuth());
-  } catch (e) {
-    console.log(`[!] ${e.message}`);
-    return;
-  }
-
-  // Step 2: Approve di Twitter
-  console.log('[*] Twitter OAuth...');
-  let code;
-  try {
-    code = await twitterAuth(authToken, ct0, twitterUrl);
-  } catch (e) {
-    console.log(`[!] ${e.message}`);
-    return;
-  }
-
-  // Step 3: Callback ke NPC → dapat airdrop_session
-  console.log('[*] Getting airdrop_session...');
+  // OAuth atau load session dari cache
   let session;
   try {
-    session = await getAirdropSession(code, state, npcCookies);
+    if (mode === 'connect') {
+      // Force OAuth baru walau ada cache
+      console.log('[*] NPC OAuth start...');
+      const { twitterUrl, npcCookies, state } = await startNpcOAuth();
+      console.log('[*] Twitter OAuth...');
+      const code = await twitterAuth(authToken, ct0, twitterUrl);
+      console.log('[*] Getting airdrop_session...');
+      session = await getAirdropSession(code, state, npcCookies);
+      saveJson(SESSION_FILE, authToken, session);
+      console.log('[+] Session OK (disimpan)');
+      return; // mode connect selesai di sini
+    }
+    session = await getOrCreateSession(authToken, ct0);
   } catch (e) {
     console.log(`[!] ${e.message}`);
     return;
   }
-  console.log('[+] Session OK');
 
   // Get /me (referral codes)
   const me = await npc('GET', '/api/airdrop/me', session);
@@ -646,10 +679,12 @@ async function main() {
   console.log('2. Daily');
   console.log('3. Post');
   console.log('4. Daily + Task (skip post)');
+  console.log('5. Connect X (save session only)');
   const modePil = (await ask(rl, 'Pilih: ')).trim();
   const mode = modePil === '2' ? 'daily'
              : modePil === '3' ? 'post'
              : modePil === '4' ? 'daily+task'
+             : modePil === '5' ? 'connect'
              : 'all';
 
   rl.close();
