@@ -46,11 +46,13 @@ function xHeaders(authToken, ct0, contentType = 'application/x-www-form-urlencod
 // ─── NPC + Twitter OAuth ─────────────────────────────────────────────────────
 
 async function getGuestToken() {
-  const r = await axios.post('https://api.twitter.com/1.1/guest/activate.json', null, {
+  const r = await axios.post('https://api.x.com/1.1/guest/activate.json', null, {
     headers: {
       'Authorization': `Bearer ${BEARER}`,
       'User-Agent': UA,
       'Content-Type': 'application/x-www-form-urlencoded',
+      'Origin': 'https://x.com',
+      'Referer': 'https://x.com/',
     },
     validateStatus: null,
   });
