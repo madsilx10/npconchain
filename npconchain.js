@@ -388,12 +388,11 @@ const TWEET_CTA = [
 
 function buildTweetText(referralCodes, attempt = 0) {
   const codes  = referralCodes.map(c => c.code).join('\n');
-  const uid    = crypto.randomBytes(6).toString('hex');
   const opener = TWEET_OPENERS[attempt % TWEET_OPENERS.length];
   const cta    = TWEET_CTA[(attempt + 1) % TWEET_CTA.length];
   // zero-width space varies per attempt supaya X tidak deteksi duplikat
   const pad    = '\u200b'.repeat((attempt % 3) + 1);
-  return `${opener}${pad}\n${cta}\n\n${codes}\n\nhttps://npconchain.xyz/airdrop?ref=${uid}`;
+  return `${opener}${pad}\n${cta}\n\n${codes}\n\nhttps://npconchain.xyz/airdrop`;
 }
 
 // ─── Posted URL Cache (posted.json) ──────────────────────────────────────────
@@ -593,14 +592,6 @@ function ask(rl, q) {
 }
 
 async function main() {
-  // Fetch Bearer token dari X JS bundle
-  try {
-    await fetchBearer();
-  } catch (e) {
-    console.log('[!] fetchBearer failed:', e.message);
-    return;
-  }
-
   // Load akun.txt: auth_token, ct0, blank (per akun)
   let akunLines;
   try {
@@ -694,6 +685,12 @@ async function main() {
   for (let j = 0; j < selected.length; j++) {
     const { auth_token, ct0, wallet, reff } = selected[j];
     console.log(`\n[${j + 1}/${selected.length}]`);
+    try {
+      await fetchBearer();
+    } catch (e) {
+      console.log('[!] fetchBearer failed:', e.message);
+      continue;
+    }
     await runAccount(auth_token, ct0, wallet, reff, mode);
 
     if (j < selected.length - 1) {
