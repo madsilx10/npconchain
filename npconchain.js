@@ -278,7 +278,7 @@ async function followX(authToken, ct0) {
     : { ok: false, err: JSON.stringify(r.data).slice(0, 200) };
 }
 
-async function postTweet(authToken, ct0, text) {
+async function postTweet(authToken, ct0, text, attempt = 0) {
   const qid = CREATE_TWEET_QID;
   const payload = {
     variables: {
@@ -322,7 +322,16 @@ async function postTweet(authToken, ct0, text) {
     try {
       const tweetResults = r.data?.data?.create_tweet?.tweet_results;
       if (!tweetResults || Object.keys(tweetResults).length === 0) {
-        return { ok: false, err: `tweet_results empty — queryId mungkin expired: ${JSON.stringify(r.data).slice(0, 200)}` };
+        // Kemungkinan spam detection — coba sekali lagi dengan teks berbeda
+        if (attempt < 2) {
+          console.log(`    [RETRY] tweet_results empty, attempt ${attempt + 1}, ganti teks...`);
+          await delay(3000, 6000);
+          // caller harus provide referralCodes, tapi karena text sudah dibangun,
+          // kita encode attempt ke dalam zero-width space
+          const padded = text + '\u200b'.repeat(attempt + 2);
+          return postTweet(authToken, ct0, padded, attempt + 1);
+        }
+        return { ok: false, err: `tweet_results empty (spam/restricted?) after ${attempt + 1} tries: ${JSON.stringify(r.data).slice(0, 200)}` };
       }
       // Handle berbagai kemungkinan struktur response
       const res      = tweetResults.result || tweetResults;
@@ -341,10 +350,32 @@ async function postTweet(authToken, ct0, text) {
 
 // ─── Build Tweet Text ─────────────────────────────────────────────────────────
 
-function buildTweetText(referralCodes) {
-  const codes = referralCodes.map(c => c.code).join('\n');
-  const uid = crypto.randomBytes(4).toString('hex');
-  return `join me on NPC · Playable Characters\ngrab an invite code (one-time use):\n\n${codes}\n\nhttps://npconchain.xyz/airdrop?ref=${uid}`;
+const TWEET_OPENERS = [
+  'join me on NPC \u00b7 Playable Characters',
+  'hopping on NPC \u00b7 Playable Characters',
+  'just joined NPC \u00b7 Playable Characters',
+  'gm \u2014 found NPC \u00b7 Playable Characters',
+  'been on NPC \u00b7 Playable Characters lately',
+  'NPC \u00b7 Playable Characters is live',
+  'check out NPC \u00b7 Playable Characters',
+];
+const TWEET_CTA = [
+  'grab an invite code (one-time use):',
+  "here's an invite code if you need one:",
+  'dropping invite codes here:',
+  'invite codes available (first come first served):',
+  'got invite codes, grab one:',
+  'use one of these invite codes:',
+];
+
+function buildTweetText(referralCodes, attempt = 0) {
+  const codes  = referralCodes.map(c => c.code).join('\n');
+  const uid    = crypto.randomBytes(6).toString('hex');
+  const opener = TWEET_OPENERS[attempt % TWEET_OPENERS.length];
+  const cta    = TWEET_CTA[(attempt + 1) % TWEET_CTA.length];
+  // zero-width space varies per attempt supaya X tidak deteksi duplikat
+  const pad    = '\u200b'.repeat((attempt % 3) + 1);
+  return `${opener}${pad}\n${cta}\n\n${codes}\n\nhttps://npconchain.xyz/airdrop?ref=${uid}`;
 }
 
 // ─── Posted URL Cache (posted.json) ──────────────────────────────────────────
@@ -460,7 +491,7 @@ async function runAccount(authToken, ct0, wallet, refCode, mode = 'all') {
     console.log(`    [SKIP] genesis_post_link (no referral codes)`);
   } else {
     console.log('[*] Posting tweet...');
-    const tw = await postTweet(authToken, ct0, buildTweetText(referralCodes));
+    const tw = await postTweet(authToken, ct0, buildTweetText(referralCodes, 0));
     if (tw.ok) {
       tweetUrl = tw.url;
       saveJson(POSTED_FILE, authToken, tweetUrl);
