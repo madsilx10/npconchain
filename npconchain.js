@@ -107,54 +107,65 @@ async function startNpcOAuth() {
 }
 
 async function twitterAuth(authToken, ct0, twitterUrl) {
-  // Step 1: GET authorize → auth_code
-  // Normalize domain ke x.com dan gunakan internal API path (/i/api/2/oauth2/authorize)
-  // bukan browser path (/i/oauth2/authorize) yang balikin HTML login page.
-  // Internal X API tetap butuh Authorization Bearer + Cookie keduanya.
-  const apiUrl = twitterUrl
-    .replace('https://twitter.com/', 'https://x.com/')
-    .replace('/i/oauth2/authorize', '/i/api/2/oauth2/authorize');
+  // Normalize domain
+  const browserUrl = twitterUrl.replace('https://twitter.com/', 'https://x.com/');
 
-  console.log('[DEBUG] apiUrl:', apiUrl);
-
-  const r1 = await axios.get(apiUrl, {
+  // Step 1: GET consent page via browser URL + user cookies
+  const r1 = await axios.get(browserUrl, {
     headers: {
-      'Authorization': `Bearer ${BEARER}`,
       'Cookie': `auth_token=${authToken}; ct0=${ct0}`,
       'X-Csrf-Token': ct0,
       'User-Agent': UA,
-      'Accept': 'application/json, text/plain, */*',
+      'Accept': 'text/html,application/xhtml+xml,*/*',
       'X-Twitter-Active-User': 'yes',
       'X-Twitter-Auth-Type': 'OAuth2Session',
       'X-Twitter-Client-Language': 'en',
-      'Referer': 'https://x.com/',
-      'Origin': 'https://x.com',
-      'Sec-Fetch-Dest': 'empty',
-      'Sec-Fetch-Mode': 'cors',
-      'Sec-Fetch-Site': 'same-origin',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'cross-site',
     },
+    maxRedirects: 5,
     validateStatus: null,
   });
+
+  console.log('[DEBUG] GET authorize status:', r1.status);
   if (r1.status !== 200) throw new Error(`GET authorize: ${r1.status} ${JSON.stringify(r1.data).slice(0,200)}`);
-  const isHtml = typeof r1.data === 'string' && r1.data.trim().startsWith('<!DOCTYPE');
-  if (isHtml) {
-    const html = r1.data;
+
+  let authCode;
+
+  if (typeof r1.data === 'object' && r1.data?.auth_code) {
+    // Langsung JSON
+    authCode = r1.data.auth_code;
+  } else {
+    const html = typeof r1.data === 'string' ? r1.data : JSON.stringify(r1.data);
     fs.writeFileSync('debug_authorize.html', html);
-    const titleMatch = html.match(/<title>([^<]*)<\/title>/i);
-    console.log('[DEBUG] title:', titleMatch ? titleMatch[1] : 'none');
-    console.log('[DEBUG] saved full HTML to debug_authorize.html (', html.length, 'chars )');
-    throw new Error(`Got HTML login page instead of JSON. Status: ${r1.status}`);
+
+    // Parse dari __NEXT_DATA__
+    const nextMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
+    if (nextMatch) {
+      try {
+        const nd = JSON.parse(nextMatch[1]);
+        authCode = nd?.props?.pageProps?.auth_code;
+      } catch {}
+    }
+
+    // Fallback: cari pattern auth_code di HTML/JS
+    if (!authCode) {
+      for (const p of [/"auth_code"\s*:\s*"([^"]+)"/, /auth_code=([^&"'\s]+)/]) {
+        const m = html.match(p);
+        if (m) { authCode = m[1]; break; }
+      }
+    }
   }
 
-  let authCode = r1.data?.auth_code;
-  if (!authCode && typeof r1.data === 'string') {
-    // HTML consent page — auth_code embedded di dalam script JSON
-    const m = r1.data.match(/"auth_code"\s*:\s*"([^"]+)"/);
-    if (m) authCode = m[1];
+  if (!authCode) {
+    const titleMatch = (typeof r1.data === 'string' ? r1.data : '').match(/<title>([^<]*)<\/title>/i);
+    throw new Error(`No auth_code. Title: "${titleMatch?.[1] || 'none'}" — cek debug_authorize.html`);
   }
-  if (!authCode) throw new Error(`No auth_code: ${String(r1.data).slice(0,300)}`);
 
-  // Step 2: POST approve → redirect_uri dengan code
+  console.log('[DEBUG] auth_code OK');
+
+  // Step 2: POST approve → dapat redirect_uri dengan code
   const r2 = await axios.post(
     'https://x.com/i/api/2/oauth2/authorize',
     `approval=true&code=${authCode}`,
