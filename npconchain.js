@@ -107,18 +107,22 @@ async function startNpcOAuth() {
 }
 
 async function twitterAuth(authToken, ct0, twitterUrl) {
-  const guestToken = await getGuestToken();
-
-  // Step 1: GET authorize → auth_code (butuh gt cookie supaya balik JSON)
+  // Step 1: GET authorize → auth_code
+  // NOTE: jangan campur gt (guest token) dengan auth_token di sini.
+  // Endpoint OAuth authorize ini pakai session login (auth_token+ct0),
+  // bukan guest session. Kalau gt ikut dikirim, X kadang balikin
+  // HTML login page, bukan JSON auth_code.
   const r1 = await axios.get(twitterUrl, {
     headers: {
       ...xHeaders(authToken, ct0),
-      'Cookie': `gt=${guestToken}; auth_token=${authToken}; ct0=${ct0}`,
-      'X-Guest-Token': guestToken,
     },
     validateStatus: null,
   });
   if (r1.status !== 200) throw new Error(`GET authorize: ${r1.status} ${JSON.stringify(r1.data).slice(0,200)}`);
+  const isHtml = typeof r1.data === 'string' && r1.data.trim().startsWith('<!DOCTYPE');
+  if (isHtml) {
+    throw new Error(`Got HTML login page instead of JSON — auth_token/ct0 kemungkinan invalid/expired atau tidak matching. Status: ${r1.status}`);
+  }
 
   let authCode = r1.data?.auth_code;
   if (!authCode && typeof r1.data === 'string') {
