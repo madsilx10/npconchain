@@ -506,7 +506,8 @@ async function runAccount(authToken, ct0, wallet, refCode, mode = 'all') {
     } else {
       console.log(`[!] Follow: ${fw.err}`);
     }
-    await delay();
+    console.log('[*] Waiting 60s sebelum tweet...');
+    await new Promise(r => setTimeout(r, 60000));
   }
 
   // ── Post tweet ──
