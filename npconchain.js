@@ -12,24 +12,42 @@ const FOLLOW_TARGET = "npconchain";
 let BEARER = '';
 
 async function fetchBearer() {
-  // GET x.com → cari URL main.js
-  const home = await axios.get('https://x.com/', {
-    headers: { 'User-Agent': UA },
-    validateStatus: null,
-  });
-  const html = typeof home.data === 'string' ? home.data : '';
-  const jsMatch = html.match(/https:\/\/abs\.twimg\.com\/responsive-web\/client-web\/main\.[^"]+\.js/);
-  if (!jsMatch) throw new Error('Cannot find main.js URL');
+  const pages = [
+    'https://x.com/i/flow/login',
+    'https://twitter.com/i/flow/login',
+    'https://x.com/login',
+    'https://x.com/',
+  ];
 
-  const js = await axios.get(jsMatch[0], {
+  let jsUrl = null;
+  for (const page of pages) {
+    try {
+      const r = await axios.get(page, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,*/*',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+        maxRedirects: 3,
+        validateStatus: null,
+      });
+      const html = typeof r.data === 'string' ? r.data : '';
+      const m = html.match(/https:\/\/abs\.twimg\.com\/responsive-web\/client-web\/main\.[a-f0-9]+\.js/);
+      if (m) { jsUrl = m[0]; console.log('[*] Found main.js:', jsUrl); break; }
+    } catch {}
+  }
+
+  if (!jsUrl) throw new Error('main.js URL not found in any X page');
+
+  const js = await axios.get(jsUrl, {
     headers: { 'User-Agent': UA },
     validateStatus: null,
   });
   const src = typeof js.data === 'string' ? js.data : '';
-  const bearerMatch = src.match(/AAAAAAAAAAAAAAAAAAAAAA[A-Za-z0-9%]+/);
-  if (!bearerMatch) throw new Error('Cannot find Bearer in main.js');
+  const m = src.match(/AAAAAAAAAAAAAAAAAAAAAA[A-Za-z0-9%+=\/]{20,}/);
+  if (!m) throw new Error('Bearer not found in main.js');
 
-  BEARER = bearerMatch[0];
+  BEARER = m[0];
   console.log('[*] Bearer fetched OK');
 }
 
