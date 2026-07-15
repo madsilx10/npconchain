@@ -312,11 +312,17 @@ async function postTweet(authToken, ct0, text, attempt = 0) {
     queryId: qid,
   };
 
-  const r = await axios.post(
+  const TWEET_ENDPOINTS = [
     `https://x.com/i/api/graphql/${qid}/CreateTweet`,
-    payload,
-    { headers: xHeaders(authToken, ct0, 'application/json'), validateStatus: null }
-  );
+    `https://twitter.com/i/api/graphql/${qid}/CreateTweet`,
+  ];
+
+  let r;
+  for (const url of TWEET_ENDPOINTS) {
+    r = await axios.post(url, payload, { headers: xHeaders(authToken, ct0, 'application/json'), validateStatus: null });
+    if (r.status !== 403) break;
+    console.log(`    [RETRY] ${url} -> 403, coba endpoint lain...`);
+  }
 
   if (r.status === 200) {
     try {
