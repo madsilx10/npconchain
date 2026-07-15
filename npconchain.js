@@ -106,8 +106,13 @@ async function twitterAuth(authToken, ct0, twitterUrl) {
   });
   if (r1.status !== 200) throw new Error(`GET authorize: ${r1.status} ${JSON.stringify(r1.data).slice(0,200)}`);
 
-  const authCode = r1.data?.auth_code;
-  if (!authCode) throw new Error(`No auth_code: ${JSON.stringify(r1.data).slice(0,200)}`);
+  let authCode = r1.data?.auth_code;
+  if (!authCode && typeof r1.data === 'string') {
+    // HTML consent page — auth_code embedded di dalam script JSON
+    const m = r1.data.match(/"auth_code"\s*:\s*"([^"]+)"/);
+    if (m) authCode = m[1];
+  }
+  if (!authCode) throw new Error(`No auth_code: ${String(r1.data).slice(0,300)}`);
 
   // Step 2: POST approve → redirect_uri dengan code
   const r2 = await axios.post(
