@@ -45,21 +45,18 @@ function xHeaders(authToken, ct0, contentType = 'application/x-www-form-urlencod
 
 // ─── NPC + Twitter OAuth ─────────────────────────────────────────────────────
 
-async function getGuestToken() {
+async function getGuestId() {
   const r = await axios.get('https://x.com', {
     headers: { 'User-Agent': UA },
     validateStatus: null,
   });
   const cookies = [].concat(r.headers['set-cookie'] || []);
   for (const c of cookies) {
-    const m = c.match(/gt=(\d+)/);
+    const m = c.match(/guest_id=([^;]+)/);
     if (m) return m[1];
   }
-  // Debug
-  console.log('[DEBUG] gt cookies:', cookies.map(c => c.split(';')[0]));
-  throw new Error('guest token not found');
+  throw new Error('guest_id not found');
 }
-// Flow:
 // 1. GET /api/airdrop/x/start → NPC generate state di server, redirect ke Twitter
 // 2. Tangkap Twitter URL + session cookie NPC
 // 3. Approve OAuth di Twitter → dapat code
@@ -96,15 +93,14 @@ async function startNpcOAuth() {
 }
 
 async function twitterAuth(authToken, ct0, twitterUrl) {
-  const guestToken = await getGuestToken();
+  const guestId = await getGuestId();
 
   // Step 1: GET authorize → auth_code
   const r1 = await axios.get(twitterUrl, {
     headers: {
       ...xHeaders(authToken, ct0),
       'Accept': 'application/json',
-      'Cookie': `guest_id=v1%3A${guestToken}; auth_token=${authToken}; ct0=${ct0}`,
-      'X-Guest-Token': guestToken,
+      'Cookie': `guest_id=${guestId}; auth_token=${authToken}; ct0=${ct0}`,
     },
     validateStatus: null,
   });
