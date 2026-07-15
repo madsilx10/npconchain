@@ -115,8 +115,11 @@ async function twitterAuth(authToken, ct0, twitterUrl) {
     .replace('https://twitter.com/', 'https://x.com/')
     .replace('/i/oauth2/authorize', '/i/api/2/oauth2/authorize');
 
+  console.log('[DEBUG] apiUrl:', apiUrl);
+
   const r1 = await axios.get(apiUrl, {
     headers: {
+      'Authorization': `Bearer ${BEARER}`,
       'Cookie': `auth_token=${authToken}; ct0=${ct0}`,
       'X-Csrf-Token': ct0,
       'User-Agent': UA,
@@ -126,6 +129,9 @@ async function twitterAuth(authToken, ct0, twitterUrl) {
       'X-Twitter-Client-Language': 'en',
       'Referer': 'https://x.com/',
       'Origin': 'https://x.com',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'same-origin',
     },
     validateStatus: null,
   });
