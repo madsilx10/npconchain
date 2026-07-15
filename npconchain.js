@@ -125,6 +125,19 @@ async function twitterAuth(authToken, ct0, twitterUrl) {
   if (r1.status !== 200) throw new Error(`GET authorize: ${r1.status} ${JSON.stringify(r1.data).slice(0,200)}`);
   const isHtml = typeof r1.data === 'string' && r1.data.trim().startsWith('<!DOCTYPE');
   if (isHtml) {
+    // Cari clue di dalam HTML-nya
+    const html = r1.data;
+    const hints = [];
+    if (html.includes('__NEXT_DATA__')) hints.push('has __NEXT_DATA__ (React app shell — need JS render)');
+    if (/error/i.test(html)) {
+      const m = html.match(/"error[^"]*"\s*:\s*"([^"]+)"/i);
+      if (m) hints.push(`error field: ${m[1]}`);
+    }
+    if (html.includes('login')) hints.push('mentions "login"');
+    if (html.includes('flow/login')) hints.push('redirects to flow/login (session not recognized)');
+    console.log('[DEBUG] response headers:', JSON.stringify(r1.headers));
+    console.log('[DEBUG] html hints:', hints.join(', ') || 'none found');
+    console.log('[DEBUG] html length:', html.length);
     throw new Error(`Got HTML login page instead of JSON. Status: ${r1.status}`);
   }
 
