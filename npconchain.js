@@ -108,11 +108,16 @@ async function startNpcOAuth() {
 
 async function twitterAuth(authToken, ct0, twitterUrl) {
   // Step 1: GET authorize → auth_code
-  // PENTING: endpoint oauth2/authorize pakai USER session auth (cookie),
-  // jangan campur dengan APP Bearer token — dua metode auth berbeda,
-  // kalau digabung X sering balikin 401 walau cookie-nya sendiri valid.
-  const r1 = await axios.get(twitterUrl, {
+  // Normalize domain ke x.com dan gunakan internal API path (/i/api/2/oauth2/authorize)
+  // bukan browser path (/i/oauth2/authorize) yang balikin HTML login page.
+  // Internal X API tetap butuh Authorization Bearer + Cookie keduanya.
+  const apiUrl = twitterUrl
+    .replace('https://twitter.com/', 'https://x.com/')
+    .replace('/i/oauth2/authorize', '/i/api/2/oauth2/authorize');
+
+  const r1 = await axios.get(apiUrl, {
     headers: {
+      'Authorization': `Bearer ${BEARER}`,
       'Cookie': `auth_token=${authToken}; ct0=${ct0}`,
       'X-Csrf-Token': ct0,
       'User-Agent': UA,
@@ -120,6 +125,7 @@ async function twitterAuth(authToken, ct0, twitterUrl) {
       'X-Twitter-Active-User': 'yes',
       'X-Twitter-Auth-Type': 'OAuth2Session',
       'X-Twitter-Client-Language': 'en',
+      'Referer': 'https://x.com/',
     },
     validateStatus: null,
   });
