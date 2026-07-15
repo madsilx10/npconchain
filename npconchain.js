@@ -116,6 +116,7 @@ async function twitterAuth(authToken, ct0, twitterUrl) {
       'Cookie': `auth_token=${authToken}; ct0=${ct0}`,
       'X-Csrf-Token': ct0,
       'User-Agent': UA,
+      'Accept': 'application/json, text/plain, */*',
       'X-Twitter-Active-User': 'yes',
       'X-Twitter-Auth-Type': 'OAuth2Session',
       'X-Twitter-Client-Language': 'en',
