@@ -6,9 +6,32 @@ const readline = require('readline');
 const CLIENT_ID   = "VC1weFM5WXJOQmxXZzI4TGZqcEs6MTpjaQ";
 const REDIRECT_URI = "https://npconchain.xyz/api/airdrop/x/callback";
 const SCOPE       = "tweet.read users.read";
-const BEARER      = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I7BeIJ1DEBc=Uq7gqpkKU3zmW0c6URAdx8oYnHMgDwKDKjWnKnGkLysTwHHqVc";
-const UA          = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
+const UA          = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36";
 const FOLLOW_TARGET = "npconchain";
+
+let BEARER = '';
+
+async function fetchBearer() {
+  // GET x.com → cari URL main.js
+  const home = await axios.get('https://x.com/', {
+    headers: { 'User-Agent': UA },
+    validateStatus: null,
+  });
+  const html = typeof home.data === 'string' ? home.data : '';
+  const jsMatch = html.match(/https:\/\/abs\.twimg\.com\/responsive-web\/client-web\/main\.[^"]+\.js/);
+  if (!jsMatch) throw new Error('Cannot find main.js URL');
+
+  const js = await axios.get(jsMatch[0], {
+    headers: { 'User-Agent': UA },
+    validateStatus: null,
+  });
+  const src = typeof js.data === 'string' ? js.data : '';
+  const bearerMatch = src.match(/AAAAAAAAAAAAAAAAAAAAAA[A-Za-z0-9%]+/);
+  if (!bearerMatch) throw new Error('Cannot find Bearer in main.js');
+
+  BEARER = bearerMatch[0];
+  console.log('[*] Bearer fetched OK');
+}
 
 // Sesuaikan key-nya kalau ternyata beda di response tasks
 const DAILY_TASK_KEYS = new Set(["daily_tweet", "daily_post", "daily_share"]);
@@ -439,6 +462,14 @@ function ask(rl, q) {
 }
 
 async function main() {
+  // Fetch Bearer token dari X JS bundle
+  try {
+    await fetchBearer();
+  } catch (e) {
+    console.log('[!] fetchBearer failed:', e.message);
+    return;
+  }
+
   // Load akun.txt: auth_token, ct0, blank (per akun)
   let akunLines;
   try {
