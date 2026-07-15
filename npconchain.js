@@ -125,6 +125,7 @@ async function twitterAuth(authToken, ct0, twitterUrl) {
       'X-Twitter-Auth-Type': 'OAuth2Session',
       'X-Twitter-Client-Language': 'en',
       'Referer': 'https://x.com/',
+      'Origin': 'https://x.com',
     },
     validateStatus: null,
   });
