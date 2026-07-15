@@ -10,6 +10,7 @@ const UA          = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTM
 const FOLLOW_TARGET = "npconchain";
 
 let BEARER = '';
+let CREATE_TWEET_QID = 'SoVnbfCycZ7fERGCwpZkYA'; // fallback, di-update saat fetchBearer
 
 async function fetchBearer() {
   const pages = [
@@ -55,6 +56,15 @@ async function fetchBearer() {
 
   BEARER = m[1] || m[0];
   console.log('[*] Bearer fetched OK');
+
+  // Extract CreateTweet queryId dinamis dari bundle
+  const qm = src.match(/"CreateTweet"\s*[,:{][^}]*?"queryId"\s*:\s*"([^"]{10,})"/);
+  if (qm) {
+    CREATE_TWEET_QID = qm[1];
+    console.log('[*] CreateTweet queryId:', CREATE_TWEET_QID);
+  } else {
+    console.log('[!] CreateTweet queryId not found in bundle, using fallback:', CREATE_TWEET_QID);
+  }
 }
 
 // Sesuaikan key-nya kalau ternyata beda di response tasks
@@ -269,12 +279,16 @@ async function followX(authToken, ct0) {
 }
 
 async function postTweet(authToken, ct0, text) {
+  const qid = CREATE_TWEET_QID;
   const payload = {
     variables: {
       tweet_text: text,
       dark_request: false,
       media: { media_entities: [], possibly_sensitive: false },
       semantic_annotation_ids: [],
+      withDownvotePerspective: false,
+      withReactionsMetadata: false,
+      withReactionsPerspective: false,
     },
     features: {
       communities_web_enable_tweet_community_results_fetch: true,
@@ -293,27 +307,36 @@ async function postTweet(authToken, ct0, text) {
       tweet_with_visibility_results_fetch_enabled: true,
       responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
       responsive_web_graphql_timeline_navigation_enabled: true,
+      responsive_web_enhance_cards_enabled: false,
     },
-    queryId: 'a1p9RWpkYKBjWv_I3WzS-A',
+    queryId: qid,
   };
 
   const r = await axios.post(
-    'https://twitter.com/i/api/graphql/a1p9RWpkYKBjWv_I3WzS-A/CreateTweet',
+    `https://x.com/i/api/graphql/${qid}/CreateTweet`,
     payload,
     { headers: xHeaders(authToken, ct0, 'application/json'), validateStatus: null }
   );
 
   if (r.status === 200) {
     try {
-      const res      = r.data.data.create_tweet.tweet_results.result;
-      const tweetId  = res.rest_id;
-      const username = res.core.user_results.result.legacy.screen_name;
+      const tweetResults = r.data?.data?.create_tweet?.tweet_results;
+      if (!tweetResults || Object.keys(tweetResults).length === 0) {
+        return { ok: false, err: `tweet_results empty — queryId mungkin expired: ${JSON.stringify(r.data).slice(0, 200)}` };
+      }
+      // Handle berbagai kemungkinan struktur response
+      const res      = tweetResults.result || tweetResults;
+      const tweetId  = res?.rest_id || res?.legacy?.id_str;
+      const username = res?.core?.user_results?.result?.legacy?.screen_name
+                    || res?.legacy?.user_id_str; // fallback
+      if (!tweetId) return { ok: false, err: `No tweetId: ${JSON.stringify(r.data).slice(0, 300)}` };
+      if (!username) return { ok: false, err: `No username: ${JSON.stringify(r.data).slice(0, 300)}` };
       return { ok: true, url: `https://x.com/${username}/status/${tweetId}` };
-    } catch {
-      return { ok: false, err: JSON.stringify(r.data).slice(0, 200) };
+    } catch (e) {
+      return { ok: false, err: `Parse error: ${e.message} | ${JSON.stringify(r.data).slice(0, 200)}` };
     }
   }
-  return { ok: false, err: JSON.stringify(r.data).slice(0, 200) };
+  return { ok: false, err: `HTTP ${r.status}: ${JSON.stringify(r.data).slice(0, 200)}` };
 }
 
 // ─── Build Tweet Text ─────────────────────────────────────────────────────────
@@ -384,17 +407,21 @@ async function runAccount(authToken, ct0, wallet, refCode, mode = 'all') {
   const xHandle = me?.user?.x_handle || tag;
   console.log(`[*] @${xHandle}`);
 
-  // Referral
-  console.log(`[*] Referral: ${refCode}`);
-  let r = await npc('POST', '/api/airdrop/referral', session, { code: refCode });
-  console.log(`    -> ${JSON.stringify(r)}`);
-  await delay();
+  // Referral + Wallet (skip di mode post, sudah pernah disubmit sebelumnya)
+  let r;
+  if (mode === 'post') {
+    console.log(`    [SKIP] referral & wallet (mode: post)`);
+  } else {
+    console.log(`[*] Referral: ${refCode}`);
+    r = await npc('POST', '/api/airdrop/referral', session, { code: refCode });
+    console.log(`    -> ${JSON.stringify(r)}`);
+    await delay();
 
-  // Wallet
-  console.log(`[*] Wallet: ${wallet}`);
-  r = await npc('POST', '/api/airdrop/wallet', session, { wallet });
-  console.log(`    -> ${JSON.stringify(r)}`);
-  await delay();
+    console.log(`[*] Wallet: ${wallet}`);
+    r = await npc('POST', '/api/airdrop/wallet', session, { wallet });
+    console.log(`    -> ${JSON.stringify(r)}`);
+    await delay();
+  }
 
   // Tasks
   console.log('[*] Fetching tasks...');
