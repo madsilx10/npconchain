@@ -593,39 +593,46 @@ function ask(rl, q) {
 }
 
 // ─── Mode: Check Status ──────────────────────────────────────────────────────
-async function checkStatus(authToken, label) {
-  const postedMap  = loadJson(POSTED_FILE);
+async function checkStatus(authToken) {
   const sessionMap = loadJson(SESSION_FILE);
+  const session    = sessionMap[authToken] || null;
 
-  const tweetUrl  = postedMap[authToken] || null;
-  const session   = sessionMap[authToken] || null;
-
-  let npcStatus = null;
-  if (session) {
-    try {
-      const me = await npc('GET', '/api/airdrop/me', session);
-      if (me?.user) {
-        const tasksResp = await npc('GET', '/api/airdrop/tasks', session);
-        const tasks = tasksResp?.tasks || [];
-        const postTask = tasks.find(t => t.key === 'genesis_post_link');
-        npcStatus = postTask?.claimed ? 'claimed' : 'not claimed';
-      } else {
-        npcStatus = 'session expired';
-      }
-    } catch {
-      npcStatus = 'session expired';
-    }
-  } else {
-    npcStatus = 'no session';
+  if (!session) {
+    console.log('  Tweet    : ⚠️  no session (run mode 5 dulu)');
+    console.log('  Task Post: ⚠️  no session');
+    return;
   }
 
-  const tweetIcon = tweetUrl  ? '✅' : '❌';
-  const npcIcon   = npcStatus === 'claimed' ? '✅'
-                  : npcStatus === 'not claimed' ? '❌'
-                  : '⚠️';
+  try {
+    const me = await npc('GET', '/api/airdrop/me', session);
+    if (!me?.user) {
+      console.log('  Tweet    : ⚠️  session expired (run mode 5 dulu)');
+      console.log('  Task Post: ⚠️  session expired');
+      return;
+    }
 
-  console.log(`  Tweet  : ${tweetIcon} ${tweetUrl || 'belum'}`);
-  console.log(`  NPC    : ${npcIcon} ${npcStatus}`);
+    const tasksResp = await npc('GET', '/api/airdrop/tasks', session);
+    const tasks     = tasksResp?.tasks || [];
+    const postTask  = tasks.find(t => t.key === 'genesis_post_link');
+
+    const taskClaimed = postTask?.claimed ?? null;
+    const tweetUrl    = postTask?.metadata?.url || postTask?.data?.url || null;
+
+    const tweetLine = tweetUrl
+      ? `✅ ${tweetUrl}`
+      : taskClaimed
+        ? '✅ (tidak ada URL tersimpan)'
+        : '❌ belum post';
+
+    const taskLine  = taskClaimed === true  ? '✅ sudah claim'
+                    : taskClaimed === false ? '❌ belum claim'
+                    : '⚠️  task tidak ditemukan';
+
+    console.log(`  Tweet    : ${tweetLine}`);
+    console.log(`  Task Post: ${taskLine}`);
+  } catch (e) {
+    console.log(`  ⚠️  Error: ${e.message}`);
+  }
 }
 
 
