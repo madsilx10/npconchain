@@ -613,8 +613,7 @@ async function checkStatus(authToken) {
 
     const tasksResp = await npc('GET', '/api/airdrop/tasks', session);
     const tasks     = tasksResp?.tasks || [];
-    console.log('  [DEBUG] task keys:', tasks.map(t => `${t.key}(claimed:${t.claimed})`).join(', '));
-    const postTask  = tasks.find(t => t.key === 'genesis_post_link');
+    const postTask  = tasks.find(t => t.key === 'daily_spread_word_v2');
 
     const taskClaimed = postTask?.claimed ?? null;
     const tweetUrl    = postTask?.metadata?.url || postTask?.data?.url || null;
